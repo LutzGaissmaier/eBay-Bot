@@ -1,0 +1,21 @@
+# eBay API Credentials
+# Copy this file to .env and fill in your actual values
+
+# eBay Production App Credentials
+EBAY_APP_ID=your_ebay_app_id_here
+EBAY_CERT_ID=your_ebay_cert_id_here
+EBAY_DEV_ID=your_ebay_dev_id_here
+EBAY_USER_TOKEN=your_ebay_user_token_here
+EBAY_REFRESH_TOKEN=your_ebay_refresh_token_here
+
+# eBay API Settings
+EBAY_ENVIRONMENT=production
+EBAY_REDIRECT_URI=urn:ietf:wg:oauth:2.0:oob
+
+# OpenAI API (optional, for AI features)
+OPENAI_API_KEY=your_openai_api_key_here
+
+# Application Settings
+FLASK_ENV=production
+FLASK_DEBUG=false
+PORT=5002

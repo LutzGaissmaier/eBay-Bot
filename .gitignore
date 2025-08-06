@@ -1,0 +1,116 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Environment variables
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Tokens and credentials
+tokens.json
+*.token
+*.key
+*_token*
+credentials.json
+
+# Logs
+*.log
+logs/
+backend.log
+frontend.log
+
+# Node modules
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs
+dist/
+build/
+static/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Screenshots/demo files
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.html
+
+# JSON data files (if they contain sensitive data)
+*_offers*.json
+*real*.json
+backend_demo_offers.json
+realistic_offers_frontend.json
+real_offers_for_frontend.json
+studibuch_offers_realistic.json
+studibuch_real_offers.json
+
+# Files with hardcoded credentials (temporary exclusion)
+backend/studibuc_automatik.py
+backend/studibuc_einfach.py
+backend/studibuc_perfekte_url.py
+backend/studibuc_vollautomatik.py
+backend/main.py
+backend/direct_best_offers.py
+backend/main_backup.py
+backend/tests/test_*.py
+backend/token_backend/studibuc_oauth_alternatives.py
+backend/token_backend/studibuc_refresh_token_system.py
+backend/token_backend/studibuc_token_erneuern.py
+frontend/src/App.jsx
+frontend/src/components/management/TokenManagement.jsx

@@ -1,0 +1,137 @@
+{
+  "verhandlungsregeln_beispiele": {
+    "standard_regel": {
+      "name": "Standard-Verhandlung",
+      "typ": "allgemein",
+      "mindestpreis_prozent": 70,
+      "auto_annahme_prozent": 95,
+      "auto_ablehnung_prozent": 60,
+      "max_rabatt_prozent": 15,
+      "max_gegenangebote": 2,
+      "verhandlungston": "freundlich",
+      "wartezeit_minuten": 15,
+      "aktiv": true
+    },
+    "aggressive_regel": {
+      "name": "Aggressive Preise",
+      "typ": "allgemein", 
+      "mindestpreis_prozent": 85,
+      "auto_annahme_prozent": 98,
+      "auto_ablehnung_prozent": 80,
+      "max_rabatt_prozent": 8,
+      "max_gegenangebote": 1,
+      "verhandlungston": "bestimmt",
+      "wartezeit_minuten": 5,
+      "aktiv": false
+    },
+    "flexible_regel": {
+      "name": "Flexible Verhandlung",
+      "typ": "allgemein",
+      "mindestpreis_prozent": 60,
+      "auto_annahme_prozent": 90,
+      "auto_ablehnung_prozent": 50,
+      "max_rabatt_prozent": 25,
+      "max_gegenangebote": 3,
+      "verhandlungston": "freundlich",
+      "wartezeit_minuten": 20,
+      "aktiv": false
+    },
+    "neue_angebote": {
+      "name": "Neue Angebote (0-7 Tage)",
+      "typ": "zeitbasiert",
+      "zeitbereich_von": 0,
+      "zeitbereich_bis": 7,
+      "mindestpreis_prozent": 80,
+      "auto_annahme_prozent": 95,
+      "auto_ablehnung_prozent": 70,
+      "max_rabatt_prozent": 12,
+      "max_gegenangebote": 2,
+      "verhandlungston": "professionell",
+      "wartezeit_minuten": 10,
+      "aktiv": true
+    },
+    "mittlere_angebote": {
+      "name": "Mittlere Laufzeit (8-21 Tage)",
+      "typ": "zeitbasiert",
+      "zeitbereich_von": 8,
+      "zeitbereich_bis": 21,
+      "mindestpreis_prozent": 75,
+      "auto_annahme_prozent": 92,
+      "auto_ablehnung_prozent": 65,
+      "max_rabatt_prozent": 18,
+      "max_gegenangebote": 2,
+      "verhandlungston": "freundlich",
+      "wartezeit_minuten": 15,
+      "aktiv": true
+    },
+    "alte_angebote": {
+      "name": "Alte Angebote (22+ Tage)",
+      "typ": "zeitbasiert",
+      "zeitbereich_von": 22,
+      "zeitbereich_bis": 999,
+      "mindestpreis_prozent": 65,
+      "auto_annahme_prozent": 88,
+      "auto_ablehnung_prozent": 55,
+      "max_rabatt_prozent": 25,
+      "max_gegenangebote": 3,
+      "verhandlungston": "freundlich",
+      "wartezeit_minuten": 25,
+      "aktiv": true
+    },
+    "wochenend_regel": {
+      "name": "Wochenend-Modus",
+      "typ": "zeitbasiert",
+      "wochentage": ["samstag", "sonntag"],
+      "mindestpreis_prozent": 70,
+      "auto_annahme_prozent": 93,
+      "auto_ablehnung_prozent": 60,
+      "max_rabatt_prozent": 20,
+      "max_gegenangebote": 2,
+      "verhandlungston": "entspannt",
+      "wartezeit_minuten": 45,
+      "aktiv": false
+    },
+    "schnellverkauf": {
+      "name": "Schnellverkauf",
+      "typ": "allgemein",
+      "mindestpreis_prozent": 55,
+      "auto_annahme_prozent": 85,
+      "auto_ablehnung_prozent": 45,
+      "max_rabatt_prozent": 30,
+      "max_gegenangebote": 1,
+      "verhandlungston": "freundlich",
+      "wartezeit_minuten": 5,
+      "aktiv": false,
+      "beschreibung": "Für Artikel die schnell weg müssen"
+    }
+  },
+  
+  "anwendungshinweise": {
+    "regel_prioritaet": "Zeitbasierte Regeln haben Vorrang vor allgemeinen Regeln",
+    "aktivierung": "Nur eine Regel pro Typ sollte gleichzeitig aktiv sein",
+    "testing": "Neue Regeln erst mit wenigen Angeboten testen",
+    "optimierung": "Regeln basierend auf Erfolgsrate regelmäßig anpassen"
+  },
+  
+  "empfohlene_einstellungen": {
+    "einsteiger": {
+      "mindestpreis_prozent": 75,
+      "auto_annahme_prozent": 95,
+      "wartezeit_minuten": 20,
+      "verhandlungston": "freundlich"
+    },
+    "erfahren": {
+      "mindestpreis_prozent": 70,
+      "auto_annahme_prozent": 92,
+      "wartezeit_minuten": 15,
+      "verhandlungston": "professionell"
+    },
+    "profi": {
+      "mindestpreis_prozent": 65,
+      "auto_annahme_prozent": 90,
+      "wartezeit_minuten": 10,
+      "verhandlungston": "bestimmt"
+    }
+  }
+}
+
