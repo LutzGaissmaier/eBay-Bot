@@ -113,4 +113,4 @@ backend/token_backend/studibuc_oauth_alternatives.py
 backend/token_backend/studibuc_refresh_token_system.py
 backend/token_backend/studibuc_token_erneuern.py
 frontend/src/App.jsx
-frontend/src/components/management/TokenManagement.jsx
+frontend/src/components/management/TokenManagement.jsxbackend/settings.json
