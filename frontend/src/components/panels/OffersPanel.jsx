@@ -47,7 +47,6 @@ function OffersPanel({ onStatsUpdate }) {
     counter_price: '',
     message: ''
   })
-  // Neue State-Variablen für Batch-Sync
   const [batchSyncStatus, setBatchSyncStatus] = useState(null)
   const [isBatchSyncing, setIsBatchSyncing] = useState(false)
   const [showBatchProgress, setShowBatchProgress] = useState(false)
@@ -317,18 +316,42 @@ function OffersPanel({ onStatsUpdate }) {
   }
 
   const formatPrice = (price) => {
+    if (typeof price === 'string') {
+      const numericValue = parseFloat(price.replace(/[^\d.,]/g, '').replace(',', '.'))
+      if (isNaN(numericValue)) return price // Return original if can't parse
+      return new Intl.NumberFormat('de-DE', {
+        style: 'currency',
+        currency: 'EUR'
+      }).format(numericValue)
+    }
     return new Intl.NumberFormat('de-DE', {
       style: 'currency',
       currency: 'EUR'
-    }).format(price)
+    }).format(price || 0)
   }
 
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleString('de-DE')
+    if (!dateString) return 'Unbekannt'
+    try {
+      return new Date(dateString).toLocaleString('de-DE')
+    } catch (error) {
+      return dateString // Return original if can't parse
+    }
   }
 
   const getOfferDetails = (offer) => {
-    const percentage = offer.list_price > 0 ? (offer.offer_amount / offer.list_price) * 100 : 0
+    const parsePrice = (priceStr) => {
+      if (typeof priceStr === 'number') return priceStr
+      if (typeof priceStr === 'string') {
+        const numericValue = parseFloat(priceStr.replace(/[^\d.,]/g, '').replace(',', '.'))
+        return isNaN(numericValue) ? 0 : numericValue
+      }
+      return 0
+    }
+    
+    const originalPrice = parsePrice(offer.original_price || offer.list_price)
+    const offerAmount = parsePrice(offer.offer_amount)
+    const percentage = originalPrice > 0 ? (offerAmount / originalPrice) * 100 : 0
     const hasCounter = offer.counter_amount || offer.counter_message
     
     return {
@@ -514,7 +537,7 @@ function OffersPanel({ onStatsUpdate }) {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="font-medium">{formatPrice(offer.list_price)}</div>
+                      <div className="font-medium">{formatPrice(offer.original_price || offer.list_price)}</div>
                     </TableCell>
                     <TableCell>
                       <div className="font-medium text-blue-600">
@@ -556,7 +579,7 @@ function OffersPanel({ onStatsUpdate }) {
                     <TableCell>
                       <div className="flex items-center space-x-2">
                         <Calendar className="h-4 w-4" />
-                        <span className="text-sm">{formatDate(offer.created_at)}</span>
+                        <span className="text-sm">{formatDate(offer.created_date || offer.created_at)}</span>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -589,7 +612,7 @@ function OffersPanel({ onStatsUpdate }) {
                                 </div>
                                 <div>
                                   <Label className="text-sm font-medium">Angebotspreis</Label>
-                                  <p className="text-sm font-bold">{formatPrice(selectedOffer.list_price)}</p>
+                                  <p className="text-sm font-bold">{formatPrice(selectedOffer.original_price || selectedOffer.list_price)}</p>
                                 </div>
                                 <div>
                                   <Label className="text-sm font-medium">Käufer-Angebot</Label>
@@ -600,7 +623,7 @@ function OffersPanel({ onStatsUpdate }) {
                                 <div>
                                   <Label className="text-sm font-medium">Prozentsatz</Label>
                                   <p className="text-sm">
-                                    {((selectedOffer.offer_amount / selectedOffer.list_price) * 100).toFixed(1)}%
+                                    {getOfferDetails(selectedOffer).percentage}%
                                   </p>
                                 </div>
                               </div>

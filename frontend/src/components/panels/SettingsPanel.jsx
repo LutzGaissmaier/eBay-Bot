@@ -8,7 +8,7 @@ import { Switch } from '@/components/ui/switch.jsx'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs.jsx'
 import { Alert, AlertDescription } from '@/components/ui/alert.jsx'
 import { Badge } from '@/components/ui/badge.jsx'
-import RulesManagement from './RulesManagement.jsx'
+import RulesManagement from '../management/RulesManagement.jsx'
 import { 
   Save, 
   TestTube, 

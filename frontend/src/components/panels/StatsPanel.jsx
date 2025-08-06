@@ -21,27 +21,38 @@ import {
   Clock
 } from 'lucide-react'
 
-function StatsPanel({ stats }) {
+function StatsPanel({ stats = {} }) {
+  const defaultStats = {
+    pending_offers: 0,
+    accepted_offers: 0,
+    rejected_offers: 0,
+    countered_offers: 0,
+    total_offers: 0,
+    success_rate: 0,
+    avg_offer_price: 0,
+    ...stats
+  }
+  
   // Daten für Diagramme vorbereiten
   const chartData = [
     {
       name: 'Wartend',
-      value: stats.pending_offers,
+      value: defaultStats.pending_offers,
       color: '#f59e0b'
     },
     {
       name: 'Angenommen',
-      value: stats.accepted_offers,
+      value: defaultStats.accepted_offers,
       color: '#10b981'
     },
     {
       name: 'Abgelehnt',
-      value: stats.rejected_offers,
+      value: defaultStats.rejected_offers,
       color: '#ef4444'
     },
     {
       name: 'Gegenangebote',
-      value: stats.countered_offers,
+      value: defaultStats.countered_offers,
       color: '#6366f1'
     }
   ]
@@ -49,22 +60,22 @@ function StatsPanel({ stats }) {
   const barData = [
     {
       name: 'Wartend',
-      count: stats.pending_offers,
+      count: defaultStats.pending_offers,
       fill: '#f59e0b'
     },
     {
       name: 'Angenommen',
-      count: stats.accepted_offers,
+      count: defaultStats.accepted_offers,
       fill: '#10b981'
     },
     {
       name: 'Abgelehnt',
-      count: stats.rejected_offers,
+      count: defaultStats.rejected_offers,
       fill: '#ef4444'
     },
     {
       name: 'Gegenangebote',
-      count: stats.countered_offers,
+      count: defaultStats.countered_offers,
       fill: '#6366f1'
     }
   ]
@@ -93,9 +104,9 @@ function StatsPanel({ stats }) {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="text-3xl font-bold text-green-600">
-            {stats.success_rate}%
+            {defaultStats.success_rate}%
           </div>
-          <Progress value={stats.success_rate} className="w-full" />
+          <Progress value={defaultStats.success_rate} className="w-full" />
           
           <div className="grid grid-cols-2 gap-4 mt-4">
             <div className="text-center p-3 bg-green-50 rounded-lg">
@@ -104,7 +115,7 @@ function StatsPanel({ stats }) {
                 <span className="text-sm font-medium">Erfolgreich</span>
               </div>
               <div className="text-lg font-bold text-green-600">
-                {stats.accepted_offers + stats.countered_offers}
+                {defaultStats.accepted_offers + defaultStats.countered_offers}
               </div>
             </div>
             
@@ -114,7 +125,7 @@ function StatsPanel({ stats }) {
                 <span className="text-sm font-medium">Abgelehnt</span>
               </div>
               <div className="text-lg font-bold text-red-600">
-                {stats.rejected_offers}
+                {defaultStats.rejected_offers}
               </div>
             </div>
           </div>
@@ -133,12 +144,12 @@ function StatsPanel({ stats }) {
         </CardHeader>
         <CardContent>
           <div className="text-3xl font-bold text-blue-600">
-            {formatPrice(stats.avg_offer_price || 0)}
+            {formatPrice(defaultStats.avg_offer_price || 0)}
           </div>
           
           <div className="mt-4 space-y-2">
             <div className="flex justify-between text-sm">
-              <span>Basierend auf {stats.total_offers} Angeboten</span>
+              <span>Basierend auf {defaultStats.total_offers} Angeboten</span>
             </div>
           </div>
         </CardContent>
@@ -208,25 +219,25 @@ function StatsPanel({ stats }) {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="text-center p-4 border rounded-lg">
               <Clock className="h-8 w-8 mx-auto mb-2 text-yellow-500" />
-              <div className="text-2xl font-bold">{stats.pending_offers}</div>
+              <div className="text-2xl font-bold">{defaultStats.pending_offers}</div>
               <div className="text-sm text-gray-500">Wartende Angebote</div>
             </div>
             
             <div className="text-center p-4 border rounded-lg">
               <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-500" />
-              <div className="text-2xl font-bold">{stats.accepted_offers}</div>
+              <div className="text-2xl font-bold">{defaultStats.accepted_offers}</div>
               <div className="text-sm text-gray-500">Angenommene Angebote</div>
             </div>
             
             <div className="text-center p-4 border rounded-lg">
               <XCircle className="h-8 w-8 mx-auto mb-2 text-red-500" />
-              <div className="text-2xl font-bold">{stats.rejected_offers}</div>
+              <div className="text-2xl font-bold">{defaultStats.rejected_offers}</div>
               <div className="text-sm text-gray-500">Abgelehnte Angebote</div>
             </div>
             
             <div className="text-center p-4 border rounded-lg">
               <MessageSquare className="h-8 w-8 mx-auto mb-2 text-blue-500" />
-              <div className="text-2xl font-bold">{stats.countered_offers}</div>
+              <div className="text-2xl font-bold">{defaultStats.countered_offers}</div>
               <div className="text-sm text-gray-500">Gegenangebote</div>
             </div>
           </div>
@@ -237,19 +248,19 @@ function StatsPanel({ stats }) {
               <div>
                 <span className="text-gray-600">Annahmequote:</span>
                 <span className="ml-2 font-medium">
-                  {stats.total_offers > 0 ? ((stats.accepted_offers / stats.total_offers) * 100).toFixed(1) : 0}%
+                  {defaultStats.total_offers > 0 ? ((defaultStats.accepted_offers / defaultStats.total_offers) * 100).toFixed(1) : 0}%
                 </span>
               </div>
               <div>
                 <span className="text-gray-600">Ablehnungsquote:</span>
                 <span className="ml-2 font-medium">
-                  {stats.total_offers > 0 ? ((stats.rejected_offers / stats.total_offers) * 100).toFixed(1) : 0}%
+                  {defaultStats.total_offers > 0 ? ((defaultStats.rejected_offers / defaultStats.total_offers) * 100).toFixed(1) : 0}%
                 </span>
               </div>
               <div>
                 <span className="text-gray-600">Verhandlungsquote:</span>
                 <span className="ml-2 font-medium">
-                  {stats.total_offers > 0 ? ((stats.countered_offers / stats.total_offers) * 100).toFixed(1) : 0}%
+                  {defaultStats.total_offers > 0 ? ((defaultStats.countered_offers / defaultStats.total_offers) * 100).toFixed(1) : 0}%
                 </span>
               </div>
             </div>

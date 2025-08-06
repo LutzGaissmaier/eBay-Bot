@@ -11,7 +11,14 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5174,
+    port: 5175,
+    host: '0.0.0.0',
+    allowedHosts: [
+      'pr-verification-app-tunnel-b9zmaf09.devinapps.com',
+      'localhost',
+      '127.0.0.1',
+      '172.16.19.2'
+    ],
     proxy: {
       '/api': {
         target: 'http://localhost:5002',

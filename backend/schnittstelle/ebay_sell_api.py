@@ -286,11 +286,17 @@ class EbaySellAPI:
                     if isinstance(ship_availability, list) and ship_availability:
                         ship_availability = ship_availability[0]
                     
-                    # Extract price
-                    price_info = ship_availability.get('availabilityDistributions', [])
+                    # Extract price - handle both dict and list cases
                     current_price = 0.0
-                    if price_info and isinstance(price_info, list):
-                        current_price = float(price_info[0].get('fulfillmentTime', {}).get('value', 0))
+                    if isinstance(ship_availability, dict):
+                        price_info = ship_availability.get('availabilityDistributions', [])
+                        if price_info and isinstance(price_info, list) and len(price_info) > 0:
+                            fulfillment_info = price_info[0].get('fulfillmentTime', {}) if isinstance(price_info[0], dict) else {}
+                            if isinstance(fulfillment_info, dict):
+                                try:
+                                    current_price = float(fulfillment_info.get('value', 0))
+                                except (ValueError, TypeError):
+                                    current_price = 0.0
                     
                     items.append({
                         'item_id': sku,
@@ -364,10 +370,17 @@ class EbaySellAPI:
                         if isinstance(ship_availability, list) and ship_availability:
                             ship_availability = ship_availability[0]
                         
-                        price_info = ship_availability.get('availabilityDistributions', [])
+                        # Extract price - handle both dict and list cases
                         current_price = 0.0
-                        if price_info and isinstance(price_info, list):
-                            current_price = float(price_info[0].get('fulfillmentTime', {}).get('value', 0))
+                        if isinstance(ship_availability, dict):
+                            price_info = ship_availability.get('availabilityDistributions', [])
+                            if price_info and isinstance(price_info, list) and len(price_info) > 0:
+                                fulfillment_info = price_info[0].get('fulfillmentTime', {}) if isinstance(price_info[0], dict) else {}
+                                if isinstance(fulfillment_info, dict):
+                                    try:
+                                        current_price = float(fulfillment_info.get('value', 0))
+                                    except (ValueError, TypeError):
+                                        current_price = 0.0
                         
                         all_items.append({
                             'item_id': sku,
@@ -890,10 +903,16 @@ class EbaySellAPI:
                     ship_availability = ship_availability[0]
                 
                 # Preis extrahieren (komplexe Struktur in Sell API)
-                price_info = ship_availability.get('availabilityDistributions', [])
                 current_price = 0.0
-                if price_info and isinstance(price_info, list):
-                    current_price = float(price_info[0].get('fulfillmentTime', {}).get('value', 0))
+                if isinstance(ship_availability, dict):
+                    price_info = ship_availability.get('availabilityDistributions', [])
+                    if price_info and isinstance(price_info, list) and len(price_info) > 0:
+                        fulfillment_info = price_info[0].get('fulfillmentTime', {}) if isinstance(price_info[0], dict) else {}
+                        if isinstance(fulfillment_info, dict):
+                            try:
+                                current_price = float(fulfillment_info.get('value', 0))
+                            except (ValueError, TypeError):
+                                current_price = 0.0
                 
                 return {
                     'title': product.get('title', 'Unbekannter Titel'),
@@ -952,4 +971,4 @@ class EbaySellAPI:
                 'title': f'Legacy Item {item_id}',
                 'current_price': 0.0,
                 'currency': 'EUR'
-            } 
+            }    

@@ -9,6 +9,9 @@ import logging
 from dotenv import load_dotenv
 import threading
 import base64
+import openai
+from functools import wraps
+import time
 
 app = Flask(__name__)
 CORS(app)
@@ -18,18 +21,65 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env'))
 
 # === API ENDPUNKTE ===
 
+from schnittstelle.ebay_api_real import EbayTradingAPI
+from schnittstelle.ebay_sell_api import EbaySellAPI
+
 # eBay-Konfiguration (aus Umgebungsvariablen)
 EBAY_CONFIG = {
     'client_id': os.getenv('EBAY_APP_ID', 'your_ebay_app_id_here'),
     'client_secret': os.getenv('EBAY_CERT_ID', 'your_ebay_cert_id_here'),
     'dev_id': os.getenv('EBAY_DEV_ID', 'your_ebay_dev_id_here'),
     'auth_token': os.getenv('EBAY_AUTH_TOKEN', ''),
+    'sandbox_mode': os.getenv('EBAY_SANDBOX', 'true').lower() == 'true'
 }
 
-# Logging-Konfiguration
+SETTINGS_FILE = 'settings.json'
+settings_lock = threading.Lock()
+
+def load_settings():
+    """Load settings from JSON file"""
+    if not os.path.exists(SETTINGS_FILE):
+        return {
+            'ebay_app_id': '',
+            'ebay_dev_id': '',
+            'ebay_cert_id': '',
+            'ebay_auth_token': '',
+            'openai_api_key': '',
+            'use_sandbox': 'true',
+            'auto_mode': 'false'
+        }
+    try:
+        with settings_lock, open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        logger.error(f"Error loading settings: {e}")
+        return {}
+
+def save_settings(settings):
+    """Save settings to JSON file"""
+    try:
+        with settings_lock, open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(settings, f, indent=2, ensure_ascii=False)
+        return True
+    except Exception as e:
+        logger.error(f"Error saving settings: {e}")
+        return False
+
+def get_ebay_api_instance():
+    """Get configured eBay API instance based on current settings"""
+    settings = load_settings()
+    return EbayTradingAPI(
+        app_id=settings.get('ebay_app_id', ''),
+        dev_id=settings.get('ebay_dev_id', ''),
+        cert_id=settings.get('ebay_cert_id', ''),
+        auth_token=settings.get('ebay_auth_token', ''),
+        sandbox_mode=settings.get('use_sandbox', 'true') == 'true'
+    )
+
+# Enhanced logging configuration
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
     handlers=[
         logging.FileHandler('backend.log', encoding='utf-8'),
         logging.StreamHandler()
@@ -37,8 +87,45 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Beispiel-Logging in TokenManager und Endpunkten:
-# logger.info('Nachricht') / logger.error('Fehler')
+request_counts = {}
+RATE_LIMIT = 100  # requests per minute
+RATE_WINDOW = 60  # seconds
+
+def rate_limit(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        client_ip = request.remote_addr
+        current_time = time.time()
+        
+        if client_ip not in request_counts:
+            request_counts[client_ip] = []
+        
+        request_counts[client_ip] = [
+            req_time for req_time in request_counts[client_ip] 
+            if current_time - req_time < RATE_WINDOW
+        ]
+        
+        if len(request_counts[client_ip]) >= RATE_LIMIT:
+            logger.warning(f"Rate limit exceeded for {client_ip}")
+            return jsonify({'error': 'Rate limit exceeded'}), 429
+        
+        request_counts[client_ip].append(current_time)
+        return f(*args, **kwargs)
+    return decorated_function
+
+@app.before_request
+def log_request_info():
+    logger.info(f"Request: {request.method} {request.url}")
+
+@app.after_request
+def log_response_info(response):
+    logger.info(f"Response: {response.status_code}")
+    return response
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    logger.error(f"Unhandled exception: {str(e)}", exc_info=True)
+    return jsonify({'error': 'Internal server error'}), 500
 
 # Beispiel: Logging in TokenManager anpassen
 TOKENS_FILE = 'tokens.json'
@@ -220,20 +307,186 @@ class TokenManager:
 
 token_manager = TokenManager()
 
+def get_ai_recommendation(offer_amount, list_price, item_title="", buyer_message=""):
+    """
+    AI-powered offer analysis using OpenAI
+    """
+    try:
+        openai_api_key = os.getenv('OPENAI_API_KEY')
+        if not openai_api_key:
+            return get_simple_ai_recommendation(offer_amount, list_price)
+        
+        openai.api_key = openai_api_key
+        percentage = (offer_amount / list_price) * 100
+        
+        prompt = f"""
+        Analyze this eBay Best Offer:
+        - Item: {item_title}
+        - List Price: €{list_price}
+        - Offer Amount: €{offer_amount} ({percentage:.1f}% of list price)
+        - Buyer Message: {buyer_message}
+        
+        Provide a recommendation (Accept/Decline/Counter) with confidence (0-100) and reasoning.
+        Consider market dynamics, negotiation psychology, and profit margins.
+        """
+        
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=200,
+            temperature=0.3
+        )
+        
+        ai_response = response.choices[0].message.content
+        
+        if "accept" in ai_response.lower():
+            recommendation = "Akzeptieren"
+            confidence = 85
+        elif "decline" in ai_response.lower():
+            recommendation = "Ablehnen"
+            confidence = 80
+        else:
+            recommendation = "Gegenangebot"
+            confidence = 75
+            
+        return {
+            'recommendation': recommendation,
+            'confidence': confidence,
+            'reasoning': ai_response,
+            'ai_powered': True
+        }
+        
+    except Exception as e:
+        logger.warning(f"OpenAI API error: {str(e)}, falling back to simple logic")
+        return get_simple_ai_recommendation(offer_amount, list_price)
+
+def get_simple_ai_recommendation(offer_amount, list_price):
+    """Simple fallback logic when OpenAI is unavailable"""
+    percentage = (offer_amount / list_price) * 100
+    
+    if percentage >= 85:
+        return {
+            'recommendation': 'Akzeptieren',
+            'confidence': 95,
+            'reasoning': f'Sehr gutes Angebot ({percentage:.1f}% des Listpreises)',
+            'ai_powered': False
+        }
+    elif percentage >= 70:
+        return {
+            'recommendation': 'Akzeptieren', 
+            'confidence': 85,
+            'reasoning': f'Fairer Preis ({percentage:.1f}% des Listpreises)',
+            'ai_powered': False
+        }
+    elif percentage >= 60:
+        return {
+            'recommendation': 'Gegenangebot',
+            'confidence': 80,
+            'reasoning': f'Preis zu niedrig ({percentage:.1f}%), Gegenangebot sinnvoll',
+            'ai_powered': False
+        }
+    else:
+        return {
+            'recommendation': 'Ablehnen',
+            'confidence': 90,
+            'reasoning': f'Angebot zu niedrig ({percentage:.1f}% des Listpreises)',
+            'ai_powered': False
+        }
+
 def lade_angebote():
-    """Lädt die realistischen Offers aus der JSON-Datei"""
+    """Lädt Offers - entweder aus eBay API oder JSON-Datei basierend auf Einstellungen"""
+    settings = load_settings()
+    use_real_api = settings.get('ebay_app_id') and settings.get('ebay_auth_token')
+    
+    if use_real_api:
+        try:
+            ebay_api = get_ebay_api_instance()
+            
+            connection_test = ebay_api.test_connection()
+            if not connection_test.get('success'):
+                logger.warning(f"eBay API connection failed: {connection_test.get('message')}")
+                return load_mock_offers()
+            
+            listings_result = ebay_api.get_my_ebay_selling()
+            if not listings_result.get('success'):
+                logger.warning(f"Failed to get eBay listings: {listings_result.get('message')}")
+                return load_mock_offers()
+            
+            offers = []
+            for item in listings_result.get('items', [])[:10]:
+                item_id = item.get('item_id')
+                if item_id:
+                    best_offers_result = ebay_api.get_best_offers(item_id)
+                    if best_offers_result.get('success'):
+                        for offer in best_offers_result.get('offers', []):
+                            offers.append({
+                                'id': f"ebay_offer_{offer.get('best_offer_id', len(offers))}",
+                                'buyer_username': offer.get('buyer_id', 'Unknown'),
+                                'offer_amount': f"{offer.get('price', 0):.2f} {offer.get('currency', 'EUR')}",
+                                'quantity': offer.get('quantity', 1),
+                                'status': translate_ebay_status(offer.get('offer_status', 'Active')),
+                                'message': offer.get('buyer_message', ''),
+                                'item_id': item_id,
+                                'item_title': item.get('title', 'eBay Item'),
+                                'original_price': f"{item.get('price', 0):.2f} EUR",
+                                'created_date': offer.get('created_time', datetime.now().isoformat()),
+                                'ai_decision': 'Warten auf Analyse',
+                                'ai_confidence': 80,
+                                'suggested_counter': calculate_counter_offer_amount(offer.get('price', 0)),
+                                'source': 'eBay Sandbox API' if settings.get('use_sandbox') == 'true' else 'eBay Production API'
+                            })
+            
+            return {
+                "success": True,
+                "message": f"{len(offers)} echte eBay Best Offers geladen",
+                "offers": offers,
+                "total_offers": len(offers),
+                "source": "eBay API"
+            }
+            
+        except Exception as e:
+            logger.error(f"Error loading eBay offers: {e}")
+            return load_mock_offers()
+    else:
+        return load_mock_offers()
+
+def load_mock_offers():
+    """Lädt die Mock-Offers aus der JSON-Datei"""
     try:
         with open('realistic_offers_frontend.json', 'r', encoding='utf-8') as f:
             data = json.load(f)
+        data['source'] = 'Mock Data'
         return data
     except Exception as e:
-        print(f"Fehler beim Laden der Offers: {e}")
+        logger.error(f"Fehler beim Laden der Mock-Offers: {e}")
         return {
             "success": False,
             "message": "Keine Offers gefunden",
             "offers": [],
-            "total_offers": 0
+            "total_offers": 0,
+            "source": "Error"
         }
+
+def translate_ebay_status(status):
+    """Übersetzt eBay Status zu Deutsch"""
+    status_map = {
+        'Active': 'Aktiv',
+        'Accepted': 'Angenommen',
+        'Declined': 'Abgelehnt',
+        'Expired': 'Abgelaufen',
+        'Retracted': 'Zurückgezogen',
+        'CounterOffered': 'Gegenangebot erhalten'
+    }
+    return status_map.get(status, status or 'Unbekannt')
+
+def calculate_counter_offer_amount(price):
+    """Berechnet intelligenten Gegenvorschlag"""
+    try:
+        amount = float(price)
+        counter = amount * 1.10
+        return f"{counter:.2f} EUR"
+    except:
+        return "N/A"
 
 @app.route('/api/offers', methods=['GET'])
 def get_offers():
@@ -242,7 +495,8 @@ def get_offers():
         "offers": data.get("offers", []),
         "total": data.get("total_offers", 0),
         "success": data.get("success", True),
-        "message": data.get("message", "Realistische Best Offers geladen")
+        "message": data.get("message", "Best Offers geladen"),
+        "source": data.get("source", "Unknown")
     })
 
 @app.route('/api/stats', methods=['GET'])
@@ -265,7 +519,29 @@ def get_token_status():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/offers/<int:offer_id>/analyze', methods=['POST'])
+def analyze_offer(offer_id):
+    try:
+        data = request.get_json()
+        offer_amount = data.get('offer_amount', 0)
+        list_price = data.get('list_price', 0)
+        item_title = data.get('item_title', '')
+        buyer_message = data.get('buyer_message', '')
+        
+        if not offer_amount or not list_price:
+            return jsonify({'error': 'Offer amount and list price required'}), 400
+            
+        recommendation = get_ai_recommendation(offer_amount, list_price, item_title, buyer_message)
+        return jsonify({
+            'success': True,
+            'recommendation': recommendation
+        })
+    except Exception as e:
+        logger.error(f"Error analyzing offer: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/sync', methods=['POST'])
+@rate_limit
 def sync_data():
     try:
         # Token vor Sync prüfen
@@ -285,6 +561,124 @@ def sync_data():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/settings', methods=['GET'])
+def get_settings():
+    """Get current settings"""
+    try:
+        settings = load_settings()
+        safe_settings = settings.copy()
+        if safe_settings.get('ebay_auth_token'):
+            safe_settings['ebay_auth_token'] = safe_settings['ebay_auth_token'][:20] + '...'
+        if safe_settings.get('openai_api_key'):
+            safe_settings['openai_api_key'] = safe_settings['openai_api_key'][:10] + '...'
+        
+        return jsonify({
+            'success': True,
+            'settings': safe_settings
+        })
+    except Exception as e:
+        logger.error(f"Error getting settings: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/settings', methods=['POST'])
+def save_settings_endpoint():
+    """Save settings"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        if data.get('ebay_app_id') or data.get('ebay_auth_token'):
+            required_fields = ['ebay_app_id', 'ebay_dev_id', 'ebay_cert_id']
+            for field in required_fields:
+                if not data.get(field):
+                    return jsonify({'error': f'Missing required field: {field}'}), 400
+        
+        if save_settings(data):
+            logger.info("Settings saved successfully")
+            return jsonify({'success': True, 'message': 'Einstellungen erfolgreich gespeichert'})
+        else:
+            return jsonify({'error': 'Failed to save settings'}), 500
+            
+    except Exception as e:
+        logger.error(f"Error saving settings: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/test-ebay', methods=['POST'])
+def test_ebay_connection():
+    """Test eBay API connection with provided or saved credentials"""
+    try:
+        data = request.get_json() or {}
+        
+        if data.get('ebay_app_id'):
+            ebay_api = EbayTradingAPI(
+                app_id=data.get('ebay_app_id'),
+                dev_id=data.get('ebay_dev_id'),
+                cert_id=data.get('ebay_cert_id'),
+                auth_token=data.get('ebay_auth_token'),
+                sandbox_mode=data.get('use_sandbox', 'true') == 'true'
+            )
+        else:
+            ebay_api = get_ebay_api_instance()
+        
+        result = ebay_api.test_connection()
+        
+        if result.get('success'):
+            return jsonify({
+                'success': True,
+                'message': result.get('message', 'eBay API Verbindung erfolgreich'),
+                'mode': result.get('mode', 'unknown'),
+                'timestamp': result.get('timestamp')
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': result.get('message', 'eBay API Verbindung fehlgeschlagen')
+            }), 400
+            
+    except Exception as e:
+        logger.error(f"Error testing eBay connection: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Verbindungstest fehlgeschlagen: {str(e)}'
+        }), 500
+
+@app.route('/api/test-openai', methods=['POST'])
+def test_openai_connection():
+    """Test OpenAI API connection"""
+    try:
+        data = request.get_json() or {}
+        api_key = data.get('openai_api_key')
+        
+        if not api_key:
+            settings = load_settings()
+            api_key = settings.get('openai_api_key')
+        
+        if not api_key:
+            return jsonify({
+                'success': False,
+                'message': 'Kein OpenAI API Key konfiguriert'
+            }), 400
+        
+        openai.api_key = api_key
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": "Test"}],
+            max_tokens=5
+        )
+        
+        return jsonify({
+            'success': True,
+            'message': 'OpenAI API Verbindung erfolgreich'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error testing OpenAI connection: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'OpenAI API Test fehlgeschlagen: {str(e)}'
+        }), 500
+
 @app.route('/api/test-token', methods=['POST'])
 def test_token():
     try:
@@ -296,4 +690,4 @@ def test_token():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5002, debug=True) 
+    app.run(host='0.0.0.0', port=5002, debug=True)     
