@@ -2,6 +2,8 @@
 
 Ein intelligenter Bot für automatische eBay-Preisverhandlungen mit menschlichem Verhalten.
 
+<!-- Verification test comment added by Devin -->
+
 ## 🚀 Schnellstart
 
 ```bash
