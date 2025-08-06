@@ -9,6 +9,9 @@ import logging
 from dotenv import load_dotenv
 import threading
 import base64
+import openai
+from functools import wraps
+import time
 
 app = Flask(__name__)
 CORS(app)
@@ -26,10 +29,10 @@ EBAY_CONFIG = {
     'auth_token': os.getenv('EBAY_AUTH_TOKEN', ''),
 }
 
-# Logging-Konfiguration
+# Enhanced logging configuration
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
     handlers=[
         logging.FileHandler('backend.log', encoding='utf-8'),
         logging.StreamHandler()
@@ -37,8 +40,45 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Beispiel-Logging in TokenManager und Endpunkten:
-# logger.info('Nachricht') / logger.error('Fehler')
+request_counts = {}
+RATE_LIMIT = 100  # requests per minute
+RATE_WINDOW = 60  # seconds
+
+def rate_limit(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        client_ip = request.remote_addr
+        current_time = time.time()
+        
+        if client_ip not in request_counts:
+            request_counts[client_ip] = []
+        
+        request_counts[client_ip] = [
+            req_time for req_time in request_counts[client_ip] 
+            if current_time - req_time < RATE_WINDOW
+        ]
+        
+        if len(request_counts[client_ip]) >= RATE_LIMIT:
+            logger.warning(f"Rate limit exceeded for {client_ip}")
+            return jsonify({'error': 'Rate limit exceeded'}), 429
+        
+        request_counts[client_ip].append(current_time)
+        return f(*args, **kwargs)
+    return decorated_function
+
+@app.before_request
+def log_request_info():
+    logger.info(f"Request: {request.method} {request.url}")
+
+@app.after_request
+def log_response_info(response):
+    logger.info(f"Response: {response.status_code}")
+    return response
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    logger.error(f"Unhandled exception: {str(e)}", exc_info=True)
+    return jsonify({'error': 'Internal server error'}), 500
 
 # Beispiel: Logging in TokenManager anpassen
 TOKENS_FILE = 'tokens.json'
@@ -220,6 +260,92 @@ class TokenManager:
 
 token_manager = TokenManager()
 
+def get_ai_recommendation(offer_amount, list_price, item_title="", buyer_message=""):
+    """
+    AI-powered offer analysis using OpenAI
+    """
+    try:
+        openai_api_key = os.getenv('OPENAI_API_KEY')
+        if not openai_api_key:
+            return get_simple_ai_recommendation(offer_amount, list_price)
+        
+        openai.api_key = openai_api_key
+        percentage = (offer_amount / list_price) * 100
+        
+        prompt = f"""
+        Analyze this eBay Best Offer:
+        - Item: {item_title}
+        - List Price: €{list_price}
+        - Offer Amount: €{offer_amount} ({percentage:.1f}% of list price)
+        - Buyer Message: {buyer_message}
+        
+        Provide a recommendation (Accept/Decline/Counter) with confidence (0-100) and reasoning.
+        Consider market dynamics, negotiation psychology, and profit margins.
+        """
+        
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=200,
+            temperature=0.3
+        )
+        
+        ai_response = response.choices[0].message.content
+        
+        if "accept" in ai_response.lower():
+            recommendation = "Akzeptieren"
+            confidence = 85
+        elif "decline" in ai_response.lower():
+            recommendation = "Ablehnen"
+            confidence = 80
+        else:
+            recommendation = "Gegenangebot"
+            confidence = 75
+            
+        return {
+            'recommendation': recommendation,
+            'confidence': confidence,
+            'reasoning': ai_response,
+            'ai_powered': True
+        }
+        
+    except Exception as e:
+        logger.warning(f"OpenAI API error: {str(e)}, falling back to simple logic")
+        return get_simple_ai_recommendation(offer_amount, list_price)
+
+def get_simple_ai_recommendation(offer_amount, list_price):
+    """Simple fallback logic when OpenAI is unavailable"""
+    percentage = (offer_amount / list_price) * 100
+    
+    if percentage >= 85:
+        return {
+            'recommendation': 'Akzeptieren',
+            'confidence': 95,
+            'reasoning': f'Sehr gutes Angebot ({percentage:.1f}% des Listpreises)',
+            'ai_powered': False
+        }
+    elif percentage >= 70:
+        return {
+            'recommendation': 'Akzeptieren', 
+            'confidence': 85,
+            'reasoning': f'Fairer Preis ({percentage:.1f}% des Listpreises)',
+            'ai_powered': False
+        }
+    elif percentage >= 60:
+        return {
+            'recommendation': 'Gegenangebot',
+            'confidence': 80,
+            'reasoning': f'Preis zu niedrig ({percentage:.1f}%), Gegenangebot sinnvoll',
+            'ai_powered': False
+        }
+    else:
+        return {
+            'recommendation': 'Ablehnen',
+            'confidence': 90,
+            'reasoning': f'Angebot zu niedrig ({percentage:.1f}% des Listpreises)',
+            'ai_powered': False
+        }
+
 def lade_angebote():
     """Lädt die realistischen Offers aus der JSON-Datei"""
     try:
@@ -265,7 +391,29 @@ def get_token_status():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/offers/<int:offer_id>/analyze', methods=['POST'])
+def analyze_offer(offer_id):
+    try:
+        data = request.get_json()
+        offer_amount = data.get('offer_amount', 0)
+        list_price = data.get('list_price', 0)
+        item_title = data.get('item_title', '')
+        buyer_message = data.get('buyer_message', '')
+        
+        if not offer_amount or not list_price:
+            return jsonify({'error': 'Offer amount and list price required'}), 400
+            
+        recommendation = get_ai_recommendation(offer_amount, list_price, item_title, buyer_message)
+        return jsonify({
+            'success': True,
+            'recommendation': recommendation
+        })
+    except Exception as e:
+        logger.error(f"Error analyzing offer: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/sync', methods=['POST'])
+@rate_limit
 def sync_data():
     try:
         # Token vor Sync prüfen
@@ -296,4 +444,4 @@ def test_token():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5002, debug=True) 
+    app.run(host='0.0.0.0', port=5002, debug=True)  

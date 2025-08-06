@@ -144,38 +144,31 @@ class EbayTradingAPI:
                         'timestamp': datetime.now().isoformat()
                     }
             
-            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError, requests.exceptions.SSLError) as e:
                 if is_production:
                     return self._production_fallback_success()
-                # Continue to other exception handlers...
                 
-        except requests.exceptions.Timeout:
-            if 'PRD-' in self.cert_id and not self.sandbox_mode:
-                return self._production_fallback_success()
-            return {
-                'success': False,
-                'message': 'Verbindung zu eBay API überschritten (Timeout)',
-                'timestamp': datetime.now().isoformat(),
-                'error_type': 'timeout'
-            }
-        except requests.exceptions.ConnectionError as e:
-            if 'PRD-' in self.cert_id and not self.sandbox_mode:
-                return self._production_fallback_success()
-            return {
-                'success': False,
-                'message': f'Verbindungsfehler zu eBay: {str(e)}',
-                'timestamp': datetime.now().isoformat(),
-                'error_type': 'connection'
-            }
-        except requests.exceptions.SSLError as e:
-            if 'PRD-' in self.cert_id and not self.sandbox_mode:
-                return self._production_fallback_success()
-            return {
-                'success': False,
-                'message': f'SSL/TLS Fehler: {str(e)}',
-                'timestamp': datetime.now().isoformat(),
-                'error_type': 'ssl'
-            }
+                if isinstance(e, requests.exceptions.Timeout):
+                    return {
+                        'success': False,
+                        'message': 'Verbindung zu eBay API überschritten (Timeout)',
+                        'timestamp': datetime.now().isoformat(),
+                        'error_type': 'timeout'
+                    }
+                elif isinstance(e, requests.exceptions.ConnectionError):
+                    return {
+                        'success': False,
+                        'message': f'Verbindungsfehler zu eBay: {str(e)}',
+                        'timestamp': datetime.now().isoformat(),
+                        'error_type': 'connection'
+                    }
+                elif isinstance(e, requests.exceptions.SSLError):
+                    return {
+                        'success': False,
+                        'message': f'SSL/TLS Fehler: {str(e)}',
+                        'timestamp': datetime.now().isoformat(),
+                        'error_type': 'ssl'
+                    }
         except requests.exceptions.RequestException as e:
             if 'PRD-' in self.cert_id and not self.sandbox_mode:
                 return self._production_fallback_success()
@@ -236,10 +229,14 @@ class EbayTradingAPI:
                     }
                 else:
                     errors = root.findall('.//ns:Errors', ns)
-                    error_msgs = [err.find('ns:LongMessage', ns).text for err in errors if err.find('ns:LongMessage', ns) is not None]
+                    error_msgs = []
+                    for err in errors:
+                        long_msg_elem = err.find('ns:LongMessage', ns)
+                        if long_msg_elem is not None and long_msg_elem.text:
+                            error_msgs.append(long_msg_elem.text)
                     return {
                         'success': False,
-                        'message': f'eBay API Error: {"; ".join(error_msgs)}',
+                        'message': f'eBay API Error: {"; ".join(error_msgs) if error_msgs else "Unknown error"}',
                         'mode': 'basic_test'
                     }
             else:
@@ -387,10 +384,14 @@ class EbayTradingAPI:
                 ack = root.find('.//ns:Ack', ns)
                 if ack is not None and ack.text != 'Success':
                     errors = root.findall('.//ns:Errors', ns)
-                    error_msgs = [err.find('ns:LongMessage', ns).text for err in errors if err.find('ns:LongMessage', ns) is not None]
+                    error_msgs = []
+                    for err in errors:
+                        long_msg_elem = err.find('ns:LongMessage', ns)
+                        if long_msg_elem is not None and long_msg_elem.text:
+                            error_msgs.append(long_msg_elem.text)
                     return {
                         'success': False,
-                        'message': f'eBay API Error: {"; ".join(error_msgs)}',
+                        'message': f'eBay API Error: {"; ".join(error_msgs) if error_msgs else "Unknown error"}',
                         'items': []
                     }
 
@@ -408,8 +409,11 @@ class EbayTradingAPI:
                         current_price = 0.0
                         if selling_status is not None:
                             price_elem = selling_status.find('ns:CurrentPrice', ns)
-                            if price_elem is not None:
-                                current_price = float(price_elem.text)
+                            if price_elem is not None and price_elem.text:
+                                try:
+                                    current_price = float(price_elem.text)
+                                except (ValueError, TypeError):
+                                    current_price = 0.0
                         
                         # Check if Best Offer is enabled
                         best_offer_enabled = item.find('ns:BestOfferDetails/ns:BestOfferEnabled', ns)
@@ -517,9 +521,13 @@ class EbayTradingAPI:
                 if ack is not None and ack.text != 'Success':
                     errors = root.findall('.//ns:Errors', ns)
                     if errors:
-                        error_msgs = [err.find('ns:LongMessage', ns).text for err in errors if err.find('ns:LongMessage', ns) is not None]
+                        error_msgs = []
+                        for err in errors:
+                            long_msg_elem = err.find('ns:LongMessage', ns)
+                            if long_msg_elem is not None and long_msg_elem.text:
+                                error_msgs.append(long_msg_elem.text)
                         # Wenn keine Best Offers vorhanden sind, ist das kein Fehler
-                        if any('No Best Offers' in msg or 'Best Offer not available' in msg for msg in error_msgs):
+                        if any('No Best Offers' in msg or 'Best Offer not available' in msg for msg in error_msgs if msg):
                             return {
                                 'success': True,
                                 'message': f'Keine aktiven Preisvorschläge für Item {item_id}',
@@ -548,7 +556,7 @@ class EbayTradingAPI:
                             'best_offer_id': offer_id.text,
                             'buyer_id': buyer_id.text,
                             'buyer_message': buyer_message.text if buyer_message is not None else '',
-                            'price': float(price.text),
+                            'price': float(price.text) if price is not None and price.text else 0.0,
                             'currency': 'EUR',
                             'offer_status': status.text if status is not None else 'Active',
                             'created_time': datetime.now().isoformat(),
@@ -655,10 +663,14 @@ class EbayTradingAPI:
                     }
                 else:
                     errors = root.findall('.//ns:Errors', ns)
-                    error_msgs = [err.find('ns:LongMessage', ns).text for err in errors if err.find('ns:LongMessage', ns) is not None]
+                    error_msgs = []
+                    for err in errors:
+                        long_msg_elem = err.find('ns:LongMessage', ns)
+                        if long_msg_elem is not None and long_msg_elem.text:
+                            error_msgs.append(long_msg_elem.text)
                     return {
                         'success': False,
-                        'message': f'eBay API Error: {"; ".join(error_msgs)}',
+                        'message': f'eBay API Error: {"; ".join(error_msgs) if error_msgs else "Unknown error"}',
                         'action': action
                     }
             else:
@@ -830,7 +842,7 @@ class EbayTradingAPI:
                                 all_items.append({
                                     'item_id': item_id_elem.text,
                                     'title': title_elem.text if title_elem is not None else 'Unbekannter Titel',
-                                    'current_price': float(start_price_elem.text) if start_price_elem is not None else 0.0,
+                                    'current_price': float(start_price_elem.text) if start_price_elem is not None and start_price_elem.text else 0.0,
                                     'currency': 'EUR',
                                     'listing_type': listing_type_elem.text if listing_type_elem is not None else 'FixedPriceItem',
                                     'listing_status': 'Active',
